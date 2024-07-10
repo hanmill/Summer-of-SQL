@@ -1,0 +1,162 @@
+A. Pizza Metrics
+1. How many pizzas were ordered?
+    A: 14
+    select COUNT(*) from customer_orders
+
+2. How many unique customer orders were made?
+    A: 10 
+    select COUNT(DISTINCT order_id) from customer_orders
+
+3. How many successful orders were delivered by each runner?
+   A:  Runner ID     Count of Orders
+          1	                4
+          2 	              3
+          3               	1
+  Select runner_id, count(DISTINCT co.order_id) from customer_orders as co
+        INNER JOIN runner_orders as ro 
+        ON co.order_id = ro.order_id
+        WHERE pickup_time != 'null'
+        Group By RUNNER_ID
+
+4. How many of each type of pizza was delivered?
+   A:  Pizza Name              Count
+          Meat Lovers            9
+          Vegetarian  	          3
+    WITH CTE AS(
+
+    Select pizza_id, count( ro.order_id) as COUNT from customer_orders as co
+    INNER JOIN runner_orders as ro 
+        ON co.order_id = ro.order_id
+    WHERE pickup_time != 'null'
+    GROUP BY PIZZA_ID) 
+      SELECT pizza_name, COUNT from CTE 
+          INNER JOIN pizza_names
+            ON CTE.pizza_id = pizza_names.pizza_id
+
+5. How many Vegetarian and Meatlovers were ordered by each customer?
+    SELECT pizza_name, customer_id, count(*) as count from customer_orders as co 
+    INNER JOIN pizza_names as pn 
+        ON co.pizza_id = pn.pizza_id
+    GROUP BY pizza_name, customer_id
+    ORDER BY customer_id, count
+
+6. What was the maximum number of pizzas delivered in a single order?
+    A: Order_ID 4 with 3 Pizzas
+    SELECT co.order_id, count(pizza_id) as number_of_pizzas FROM customer_orders as co
+    INNER JOIN runner_orders as ro
+        ON co.order_id = ro.order_id
+    WHERE pickup_time != 'null'
+    GROUP BY co.order_id
+    ORDER BY number_of_pizzas DESC
+    LIMIT 1
+
+7. For each customer, how many delivered pizzas had at least 1 change and how many had no changes?
+
+8. How many pizzas were delivered that had both exclusions and extras?
+    A: 1
+    SELECT co.order_id, co.customer_id, co.pizza_id, exclusions, extras,  
+        (exclusions <> 'null' and length(exclusions)>0) as Has_Exclusions, 
+        (extras <> 'null' and length(extras)>0) as Has_Extras        
+    FROM customer_orders as co
+    INNER JOIN runner_orders as ro
+            ON co.order_id = ro.order_id
+    WHERE pickup_time != 'null' AND Has_Exclusions = TRUE AND Has_Extras = TRUE
+
+9. What was the total volume of pizzas ordered for each hour of the day?
+  SELECT HOUR(ORDER_TIME)  as Hour, count(*) as number_of_pizzas from customer_orders
+  GROUP BY Hour
+  ORDER BY Hour
+
+10. What was the volume of orders for each day of the week?
+    SELECT dayofweek(ORDER_TIME)  as Weekday, count(*) as number_of_pizzas from customer_orders
+    GROUP BY Weekday
+    ORDER BY Weekday
+
+B. Runner and Customer Experience
+1. How many runners signed up for each 1 week period? (i.e. week starts 2021-01-01)
+    Select  date_part('week', registration_date) as registration_week, count(runner_id) as number_of_registrations from runners
+    Group BY registration_week
+
+2. What was the average time in minutes it took for each runner to arrive at the Pizza Runner HQ to pickup the order?
+    WITH CTE AS(
+        SELECT runner_id,  pickup_time::timestamp_ntz as "pickup_time", order_time, datediff('minutes', order_time, pickup_time) as time_taken
+        from RUNNER_ORDERS as ro
+        INNER JOIN customer_orders as co 
+                ON ro.order_id = co.order_id
+        WHERE pickup_time!='null') 
+    SELECT runner_id, avg(time_taken) from CTE 
+    GROUP BY runner_id
+
+3. Is there any relationship between the number of pizzas and how long the order takes to prepare?
+    WITH CTE AS(
+        SELECT co.order_id, count(co.pizza_id) as number_of_pizzas , max(datediff('minutes', order_time, pickup_time::timestamp_ntz)) as preparation_time
+        from RUNNER_ORDERS as ro
+        INNER JOIN customer_orders as co 
+              ON ro.order_id = co.order_id
+        WHERE pickup_time!='null'
+       Group by co.order_id) 
+    SELECT number_of_pizzas, avg(preparation_time)
+    FROM CTE 
+    GROUP BY number_of_pizzas
+
+4. What was the average distance travelled for each customer?
+    WITH CTE AS(
+        SELECT co.order_id, co.customer_id, trim( replace( distance, 'km', ''))::float as distance
+        FROM customer_orders as co
+        INNER JOIN runner_orders as ro 
+                ON co.order_id = ro.order_id
+        WHERE distance != 'null') 
+    SELECT customer_id, AVG(distance) FROM CTE
+    GROUP BY customer_id
+
+5. What was the difference between the longest and shortest delivery times for all orders?
+    Select  MAX(left(duration,2)::int) as MAX_DURATION,  MIN(left(duration,2)::int) as MIN_DURATION, MAX_DURATION-MIN_DURATION as DIFF
+    FROM runner_orders
+    WHERE duration != 'null'
+
+6. What was the average speed for each runner for each delivery and do you notice any trend for these values?
+    SELECT runner_id, order_id,   avg((trim( replace( distance, 'km', ''))::float)/(left(duration,2)::float)) as speed
+    FROM runner_orders
+    WHERE duration != 'null'
+    GROUP BY runner_id, order_id
+    ORDER BY runner_id, order_id
+
+7. What is the successful delivery percentage for each runner?
+    select runner_id, 
+    count(order_id) total_orders, 
+    count_if( iff(pickup_time='null', 'Cancelled', 'Delivered') = 'Delivered') as Delivered, 
+    (Delivered/total_orders) *100 as Success_Rate
+    from runner_orders
+    GROUP BY runner_id
+
+C. Ingredient Optimisation
+What are the standard ingredients for each pizza?
+What was the most commonly added extra?
+What was the most common exclusion?
+Generate an order item for each record in the customers_orders table in the format of one of the following:
+Meat Lovers
+Meat Lovers - Exclude Beef
+Meat Lovers - Extra Bacon
+Meat Lovers - Exclude Cheese, Bacon - Extra Mushroom, Peppers
+Generate an alphabetically ordered comma separated ingredient list for each pizza order from the customer_orders table and add a 2x in front of any relevant ingredients
+For example: "Meat Lovers: 2xBacon, Beef, ... , Salami"
+What is the total quantity of each ingredient used in all delivered pizzas sorted by most frequent first?
+D. Pricing and Ratings
+If a Meat Lovers pizza costs $12 and Vegetarian costs $10 and there were no charges for changes - how much money has Pizza Runner made so far if there are no delivery fees?
+What if there was an additional $1 charge for any pizza extras?
+Add cheese is $1 extra
+The Pizza Runner team now wants to add an additional ratings system that allows customers to rate their runner, how would you design an additional table for this new dataset - generate a schema for this new table and insert your own data for ratings for each successful customer order between 1 to 5.
+Using your newly generated table - can you join all of the information together to form a table which has the following information for successful deliveries?
+customer_id
+order_id
+runner_id
+rating
+order_time
+pickup_time
+Time between order and pickup
+Delivery duration
+Average speed
+Total number of pizzas
+If a Meat Lovers pizza was $12 and Vegetarian $10 fixed prices with no cost for extras and each runner is paid $0.30 per kilometre traveled - how much money does Pizza Runner have left over after these deliveries?
+E. Bonus Questions
+If Danny wants to expand his range of pizzas - how would this impact the existing data design? Write an INSERT statement to demonstrate what would happen if a new Supreme pizza with all the toppings was added to the Pizza Runner menu?
