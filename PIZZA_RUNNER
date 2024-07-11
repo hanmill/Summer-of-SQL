@@ -131,15 +131,45 @@ B. Runner and Customer Experience
 
 C. Ingredient Optimisation
 1. What are the standard ingredients for each pizza?
+    SELECT n.pizza_id, value, topping_name, n.pizza_name
+    FROM pizza_recipes as r
+    LEFT JOIN LATERAL SPLIT_TO_TABLE(toppings, ', ')
+    INNER JOIN pizza_toppings as t 
+        ON value = t.topping_id
+    INNER JOIN pizza_names as n
+        on n.pizza_id = r.pizza_id
+
 2. What was the most commonly added extra?
+    WITH CTE AS(
+        SELECT count(pizza_id) as number_of_pizzas, value as topping FROM customer_orders as co
+        LEFT JOIN LATERAL SPLIT_TO_TABLE(extras, ', ')
+        WHERE extras != 'null' AND extras != ''
+        GROUP BY value) 
+    SELECT pt.topping_name, number_of_pizzas FROM CTE
+    INNER JOIN pizza_toppings pt
+            ON CTE.topping = pt.topping_id
+    ORDER BY number_of_pizzas DESC 
+
 3. What was the most common exclusion?
+    WITH CTE AS (
+        SELECT count(pizza_id) as number_of_pizzas, value as topping_id from customer_orders
+        LEFT JOIN LATERAL SPLIT_TO_TABLE(exclusions, ', ')
+        WHERE exclusions != 'null' AND exclusions != ''
+        GROUP BY value) 
+    SELECT topping_name, number_of_pizzas FROM CTE 
+    INNER JOIN pizza_toppings as pt
+            ON CTE.topping_id = pt.topping_id
+    ORDER BY number_of_pizzas DESC
+
 4. Generate an order item for each record in the customers_orders table in the format of one of the following:
         Meat Lovers
         Meat Lovers - Exclude Beef
         Meat Lovers - Extra Bacon
         Meat Lovers - Exclude Cheese, Bacon - Extra Mushroom, Peppers
+
 5. Generate an alphabetically ordered comma separated ingredient list for each pizza order from the customer_orders table and add a 2x in front of any relevant ingredients
         For example: "Meat Lovers: 2xBacon, Beef, ... , Salami"
+
 6. What is the total quantity of each ingredient used in all delivered pizzas sorted by most frequent first?
 
 D. Pricing and Ratings
