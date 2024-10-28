@@ -1,0 +1,148 @@
+1. What is the total amount each customer spent at the restaurant?
+    select customer_id, sum(price) as total_price from sales as s 
+    inner join menu as m
+    on s.product_id = m.product_id 
+    group by customer_id
+
+2. How many days has each customer visited the restaurant?
+    select customer_id, count(distinct order_date) as days_visited from sales as s 
+    inner join menu as m
+    on s.product_id = m.product_id 
+    group by customer_id
+
+3. What was the first item from the menu purchased by each customer?
+    select customer_id, min(order_date) as first_order, product_name from sales as s 
+    inner join menu as m
+    on s.product_id = m.product_id 
+    group by customer_id, product_name
+
+4. What is the most purchased item on the menu and how many times was it purchased by all customers?
+    select product_name, count(customer_id) as times_ordered from sales as s 
+    inner join menu as m
+    on s.product_id = m.product_id 
+    group by product_name
+    order by times_ordered desc
+
+5. Which item was the most popular for each customer?
+   select customer_id, product_name, count(order_date) as times_ordered from sales as s 
+    inner join menu as m
+    on s.product_id = m.product_id 
+    group by customer_id, product_name
+    order by customer_id, times_ordered DESC
+
+6. Which item was purchased first by the customer after they became a member?
+    WITH CTE AS (
+    select s.customer_id, order_date, m.product_name, order_date>=join_date as order_after_join, RANK() OVER(PARTITION BY s.customer_id ORDER BY order_date ASC) as rn
+    from sales as s 
+    inner join menu as m
+    on s.product_id = m.product_id 
+    inner join members as mem
+    on s.customer_id = mem.customer_id
+    WHERE order_after_join = TRUE ) 
+
+    SELECT customer_id, min(order_date), product_name, rn FROM CTE
+    WHERE rn = 1
+    group by customer_id, product_name, rn
+
+7. Which item was purchased just before the customer became a member?
+    WITH CTE AS (
+    select s.customer_id, order_date, m.product_name, order_date<join_date as order_after_join, RANK() OVER(PARTITION BY s.customer_id ORDER BY order_date ASC) as rn
+    from sales as s 
+    inner join menu as m
+    on s.product_id = m.product_id 
+    inner join members as mem
+    on s.customer_id = mem.customer_id
+    WHERE order_after_join = TRUE ) 
+
+    SELECT customer_id, order_date, product_name, rn FROM CTE
+    WHERE rn = 1
+
+8. What is the total items and amount spent for each member before they became a member?
+    select s.customer_id, sum(price) as total_spend, count(s.product_id) as total_items from sales as s
+    inner join menu as m 
+    on s.product_id = m.product_id
+    inner join members as mem
+    on s.customer_id = mem.customer_id
+    where order_date < join_date
+    group by s.customer_id
+
+9. If each $1 spent equates to 10 points and sushi has a 2x points multiplier - how many points would each customer have?
+    WITH CTE AS(
+      select s.customer_id, 
+          case product_name
+          when 'sushi' then price*10*2
+          else price*10
+          end as points
+      from sales as s
+      inner join menu as m 
+      on s.product_id = m.product_id) 
+
+    select customer_id, sum(points) as points from CTE
+    group by customer_id
+
+      I did a CTE as didn't think aggregating my case worked but it's becuase I put it around the 'as points' part too. 
+
+      ALT 
+      select s.customer_id, 
+         sum( case product_name
+              when 'sushi' then price*10*2
+              else price*10
+              end) as points
+        from sales as s
+        inner join menu as m 
+        on s.product_id = m.product_id
+      group by s.customer_id
+
+10. In the first week after a customer joins the program (including their join date) they earn 2x points on all items, not just sushi - how many points do customers A and B have at the end of January?
+      WITH CTE AS (
+      select s.customer_id, 
+         case product_name
+          when 'sushi' then price*10*2
+          else price*10
+          end  as points, 
+
+          datediff('day', join_date, order_date ) <7 as week_after_join, 
+
+          iff(week_after_join = TRUE, points*2, points) as adjusted_points
+    
+      from sales as s
+      inner join menu as m 
+      on s.product_id = m.product_id
+      inner join members as mem
+      on s.customer_id = mem.customer_id
+      where order_date>=join_date
+      ) 
+          
+      SELECT customer_id, sum(adjusted_points) as points FROM CTE
+      group by customer_id
+
+
+  ALT 
+
+           WITH CTE AS (
+              select s.customer_id, join_date, order_date,  datediff('day', join_date, order_date ), product_name, 
+              iff(datediff('day', join_date, order_date ) <=7, 'double', product_name) as new_product_name, 
+                 case 
+                  when order_date between join_date and dateadd('day', 6, join_date) then price * 10 * 2
+                  when product_name = 'sushi' then price*10*2
+                  else price*10
+                  end  as points,
+    
+        from sales as s
+        inner join menu as m 
+        on s.product_id = m.product_id
+        inner join members as mem
+        on s.customer_id = mem.customer_id
+        where  month(order_date) = 1
+        ) 
+        SELECT customer_id, sum(points) as points FROM CTE
+        group by customer_id
+
+
+
+
+
+
+
+
+      
