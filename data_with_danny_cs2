@@ -1,0 +1,109 @@
+Pizza Runner Part B: 
+-- B. Runner and Customer Experience
+-- 1. How many runners signed up for each 1 week period? (i.e. week starts 2021-01-01)
+
+        select count(distinct runner_id) as number_of_runners,  week(registration_date) as week from runners
+        group by week;
+
+        select date_trunc('week', registration_date)+4 as reg_week, count(runner_id) from runners
+        group by all ;
+
+        --CTE option
+            WITH CTE AS (
+            SELECT 
+            runner_id,
+            registration_date,
+            DATE_TRUNC('week',registration_date)+4 as start_of_week
+            FROM runners
+            )
+            SELECT 
+            start_of_week,
+            COUNT(runner_id) as count
+            FROM CTE
+            GROUP BY start_of_week
+
+-- 2. What was the average time in minutes it took for each runner to arrive at the Pizza Runner HQ to pickup the order?
+        select *, iff(left(duration, 2) = 'nu', null, left(duration, 2)) as mins from runner_orders; 
+
+        select runner_id, avg(iff(left(duration, 2) = 'nu', null, left(duration, 2))) as mins from runner_orders
+        group by runner_id; 
+
+        --CTE option
+        WITH CTE AS (
+            select *, 
+            iff(left(duration, 2) = 'nu', null, left(duration, 2)) as mins 
+            from runner_orders
+        )
+        SELECT runner_id, avg(mins) from CTE 
+        Group by runner_id; 
+
+        --correct solution - I used duration as the time spent to arrive oops
+        WITH CTE AS(
+            select runner_id, pickup_time::datetime as pickup_time, order_time, datediff('min', order_time, pickup_time) as time_to_pickup from customer_orders as c 
+            inner join runner_orders as r
+            on c.order_id = r.order_id 
+            where pickup_time != 'null'
+        )
+        Select runner_id, avg(time_to_pickup) as avg_time_to_pickup from CTE
+        Group by runner_id;
+
+    -- <> is more widely used than != 
+
+-- 3. Is there any relationship between the number of pizzas and how long the order takes to prepare?
+        WITH CTE AS(
+            select runner_id, pickup_time::datetime as pickup_time, order_time, datediff('min', order_time, pickup_time) as time_to_pickup, r.order_id 
+            from customer_orders as c 
+            inner join runner_orders as r
+            on c.order_id = r.order_id 
+            where pickup_time != 'null'
+        )
+        Select runner_id, avg(time_to_pickup) as avg_time_to_pickup, count(order_id) as no_of_pizzas from CTE
+        Group by runner_id;
+
+        
+
+-- 4. What was the average distance travelled for each customer?
+        WITH CTE AS (
+            select iff(replace(distance, 'km', '')='null', null,replace(distance, 'km', ''))::float  as distance2, customer_id 
+            from runner_orders as r
+            inner join customer_orders as c
+            on r.order_id = c.order_id
+        ) 
+        SELECT customer_id, avg(distance2) as avg_distance from CTE 
+        Group by customer_id;
+
+
+-- 5. What was the difference between the longest and shortest delivery times for all orders?
+
+    WITH CTE AS (
+    select pickup_time::datetime as pickup_time2, datediff('min', order_time, pickup_time2) as delivery_time from customer_orders as c
+    inner join runner_orders as r 
+    on c.order_id = r.order_id
+    where pickup_time <> 'null'
+    ) 
+    SELECT MAX(delivery_time) as max_time, MIN(delivery_time) as min_time, (max_time - min_time) as diff FROM CTE; 
+
+-- 6. What was the average speed for each runner for each delivery and do you notice any trend for these values?
+    WITH CTE AS (
+        select runner_id, 
+        replace(distance, 'km', '')::float as distance_km, 
+        left(duration, 2)::int as duration_min, 
+        distance_km/duration_min as speed
+        from runner_orders
+        where pickup_time <> 'null'
+        )
+    SELECT runner_id,  round(AVG(speed),2) as avg_speed from CTE
+    group by runner_id;
+
+-- 7. What is the successful delivery percentage for each runner?
+        WITH CTE AS (
+            select runner_id, 
+            iff(contains(cancellation, 'Cancellation'), 'cancelled', 'success') as cancelled, 
+            iff(cancelled = 'cancelled', 1, 0) as cancel, 
+            iff(cancelled = 'success', 1, 0) as success
+            from runner_orders
+            )  
+        SELECT runner_id, sum(cancel) as cancel, sum(success) as success, count(*) as total, round((sum(success)/total) * 100,0) as success_rate
+        FROM CTE 
+        group by runner_id
+
