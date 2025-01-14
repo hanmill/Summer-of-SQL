@@ -1,0 +1,102 @@
+--Input each of the 12 monthly files
+--Create a 'file date' using the month found in the file name
+--The Null value should be replaced as 1
+--Clean the Market Cap value to ensure it is the true value as 'Market Capitalisation'
+--Remove any rows with 'n/a'
+--Categorise the Purchase Price into groupings
+----0 to 24,999.99 as 'Low'
+----25,000 to 49,999.99 as 'Medium'
+----50,000 to 74,999.99 as 'High'
+----75,000 to 100,000 as 'Very High'
+--Categorise the Market Cap into groupings
+----Below $100M as 'Small'
+----Between $100M and below $1B as 'Medium'
+----Between $1B and below $100B as 'Large' 
+----$100B and above as 'Huge'
+--Rank the highest 5 purchases per combination of: file date, Purchase Price Categorisation and Market Capitalisation Categorisation.
+--Output only records with a rank of 1 to 5
+
+-- I found this challenge moderate and I'm happy that I have put into practice a lot of skills used in previous week's challenges.
+--  Not sure if I used best practice to clean up the string values and convert into floats but it worked.
+
+WITH UNION_ALL AS (
+    select 1 as file, * from pd2023_wk08_01
+    union all 
+    select 2 as file, * from pd2023_wk08_02
+    union all 
+    select 3 as file, * from pd2023_wk08_03
+    union all 
+    select 4 as file, * from pd2023_wk08_04
+    union all 
+    select 5 as file, * from pd2023_wk08_05
+    union all 
+    select 6 as file, * from pd2023_wk08_06
+    union all 
+    select 7 as file, * from pd2023_wk08_07
+    union all 
+    select 8 as file, * from pd2023_wk08_08
+    union all 
+    select 9 as file, * from pd2023_wk08_09
+    union all 
+    select 10 as file, * from pd2023_wk08_10
+    union all 
+    select 11 as file, * from pd2023_wk08_11
+    union all 
+    select 12 as file, * from pd2023_wk08_12
+)
+,
+CLEAN_VALUES AS(
+    SELECT 
+    *, 
+    date_from_parts(2023,file,01) as file_date,
+    replace(purchase_price,'$','')::float as purchase_price_clean,
+    case
+     when right(market_cap,1)='B' then 1000000000
+     when right(market_cap,1)='M' then 1000000
+        else 0
+     end 
+     as market_cap_multiplier,
+    replace(replace(replace(market_cap, '$',''),'M',''), 'B','') ::float as market_cap_clean,
+    market_cap_clean * market_cap_multiplier as market_cap_new
+    FROM UNION_ALL
+) 
+,
+GROUPINGS AS (
+SELECT *, 
+    case 
+    when purchase_price_clean < 25000 then 'Low'
+    when purchase_price_clean < 50000 then 'Medium'
+    when purchase_price_clean < 75000 then 'High'
+    else 'Very High'
+    end
+    as purchase_price_groupings
+    ,
+    case
+    when market_cap_new < 100000000 then 'Small'
+    when market_cap_new < 1000000000 then 'Medium'
+    when market_cap_new < 100000000000 then 'Large'
+    else 'Huge'
+    end
+    as market_cap_groupings
+    FROM CLEAN_VALUES
+    WHERE MARKET_CAP <> 'n/a'
+)
+,
+RANKINGS AS (
+    SELECT file_date, 
+    purchase_price_groupings, 
+    market_cap_groupings, 
+    ticker,
+    sector,
+    market,
+    stock_name,
+    purchase_price_clean as purchase_price,
+    market_cap_new as market_cap,
+    rank() OVER(PARTITION BY file_date, purchase_price_groupings, market_cap_groupings ORDER BY purchase_price DESC) as rank
+    FROM GROUPINGS
+) 
+
+SELECT * FROM RANKINGS 
+WHERE rank <=5 
+
+
