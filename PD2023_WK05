@@ -1,0 +1,39 @@
+--Input data
+--Create the bank code by splitting out off the letters from the Transaction code, call this field 'Bank'
+--Change transaction date to the just be the month of the transaction
+--Total up the transaction values so you have one row for each bank and month combination
+--Rank each bank for their value of transactions each month against the other banks. 1st is the highest value of transactions, 3rd the lowest. 
+--Without losing all of the other data fields, find:
+--The average rank a bank has across all of the months, call this field 'Avg Rank per Bank'
+--The average transaction value per rank, call this field 'Avg Transaction Value per Rank'
+--Output the data
+
+Lots of CTEs with this one which was good practice - used Will Sutton's walkthrough solution video to verify and check my understanding (https://www.youtube.com/watch?v=sU_E1ah8Dt4)
+- got a bit muddled with what it was asking to aggregate and rejoining the CTEs at the end.
+
+WITH CTE AS (
+    select *, 
+    split_part(transaction_code, '-',1) as BANK, 
+    monthname(date(transaction_date, 'dd/MM/yyyy hh24:mi:ss')) as transaction_month
+    from pd2023_wk01
+), 
+PRE_AGG AS(
+    SELECT bank, 
+    transaction_month, 
+    sum(value) as total_value, 
+    ROW_NUMBER () OVER (PARTITION BY transaction_month ORDER BY total_value DESC) as rank 
+    FROM CTE
+    group by bank, transaction_month
+),
+AVG_RANK AS(
+    SELECT bank, avg(rank) as avg_rank_per_bank FROM PRE_AGG
+    group by bank
+),
+AVG_TRANSACTION AS(
+    SELECT rank, avg(total_value) as avg_transaction_per_rank FROM PRE_AGG
+    group by rank
+)
+
+SELECT PA.bank, transaction_month, total_value, PA.rank, avg_rank_per_bank, avg_transaction_per_rank FROM PRE_AGG AS PA
+INNER JOIN AVG_RANK AS AR ON AR.bank = PA.bank
+INNER JOIN AVG_TRANSACTION AS AT ON AT.rank = PA.rank
