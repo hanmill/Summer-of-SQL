@@ -1,0 +1,71 @@
+--Input the data
+--We want to stack the tables on top of one another, since they have the same fields in each sheet. We can do this one of 2 ways (help):
+--Drag each table into the canvas and use a union step to stack them on top of one another
+--Use a wildcard union in the input step of one of the tables
+--Some of the fields aren't matching up as we'd expect, due to differences in spelling. Merge these fields together - union all in sql works on position not column name
+--Make a Joining Date field based on the Joining Day, Table Names and the year 2023
+--Now we want to reshape our data so we have a field for each demographic, for each new customer (help)
+--Make sure all the data types are correct for each field
+--Remove duplicates (help)
+--If a customer appears multiple times take their earliest joining date
+--Output the data
+
+Followed Will Sutton's guide for this one! - lots to get your head around here https://www.youtube.com/watch?v=yzqOdgzGtTE
+
+WITH CTE AS(
+select * ,'january ' as tablename from pd2023_wk04_january
+union all
+select *, 'february ' as tablename from pd2023_wk04_february
+union all
+select *, 'march ' as tablename from pd2023_wk04_march
+union all
+select *, 'april ' as tablename from pd2023_wk04_april
+union all 
+select *, 'may ' as tablename from pd2023_wk04_may
+union all 
+select *, 'june ' as tablename from pd2023_wk04_june
+union all 
+select *, 'july ' as tablename from pd2023_wk04_july
+union all 
+select *, 'august ' as tablename from pd2023_wk04_august
+union all 
+select *, 'september ' as tablename from pd2023_wk04_september
+union all 
+select *, 'october ' as tablename from pd2023_wk04_october
+union all 
+select *, 'november ' as tablename from pd2023_wk04_november
+union all 
+select *, 'december ' as tablename from pd2023_wk04_december
+)
+, PRE_PIVOT AS(
+SELECT 
+id,
+demographic,
+value,
+date_from_parts(2023, date_part('month',date(tablename, 'MMMM')) , joining_day) as joining_date
+FROM CTE
+)
+, POST_PIVOT AS(
+SELECT 
+id,
+joining_date,
+ethnicity,
+account_type,
+date_of_birth,
+ROW_NUMBER() OVER(PARTITION BY id ORDER BY joining_date ASC) as rn
+FROM PRE_PIVOT
+PIVOT(MAX(value) FOR demographic IN ('Ethnicity', 'Account Type', 'Date of Birth')) AS P
+(id,
+joining_date,
+ethnicity,
+account_type,
+date_of_birth)
+)
+SELECT 
+id, 
+joining_date,
+ethnicity,
+account_type,
+date_of_birth
+from POST_PIVOT
+WHERE rn = 1
