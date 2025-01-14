@@ -1,0 +1,43 @@
+--Input the data
+--For the Transaction Path table:
+--Make sure field naming convention matches the other tables
+-----i.e. instead of Account_From it should be Account From
+--For the Account Information table:
+--Make sure there are no null values in the Account Holder ID
+--Ensure there is one row per Account Holder ID
+--Joint accounts will have 2 Account Holders, we want a row for each of them
+--For the Account Holders table:
+--Make sure the phone numbers start with 07
+--Bring the tables together
+--Filter out cancelled transactions 
+--Filter to transactions greater than £1,000 in value 
+--Filter out Platinum accounts
+--Output the data
+
+I found this challenge quite managable, learning lateral split to table.
+
+WITH ACC_INFO AS (
+    SELECT value as account_holder_id, account_number, account_type, balance_date, balance
+    FROM pd2023_wk07_account_information, LATERAL SPLIT_TO_TABLE(account_holder_id,', ')
+    WHERE account_holder_id IS NOT NULL
+)
+,
+ACC_HOLDERS AS (
+    SELECT 
+    account_holder_id,
+    name,
+    date_of_birth,
+    first_line_of_address,
+    concat('0',contact_number) as phone_number FROM pd2023_wk07_account_holders
+)
+
+SELECT * FROM ACC_HOLDERS AS ah
+INNER JOIN ACC_INFO as ai
+    on ah.account_holder_id = ai.account_holder_id
+INNER JOIN pd2023_wk07_transaction_path as tp
+    on ai.account_number = tp.account_from
+INNER JOIN pd2023_wk07_transaction_detail as td
+on td.transaction_id = tp.transaction_id
+WHERE CANCELLED_ <> 'Y'
+    AND value > 1000
+    AND account_type <> 'Platinum'
